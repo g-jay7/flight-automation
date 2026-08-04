@@ -1,0 +1,185 @@
+#!/usr/bin/env node
+/*
+ * track — fun terminal flight tracker.
+ *
+ *   ./track TS123          live view, refreshes every 15s, Ctrl+C to quit
+ *   ./track TS123 --once   print one status line and exit
+ *
+ * Zero dependencies. The flight logic (callsign mapping, distance math,
+ * progress/ETA) is loaded from flight-tracker.html's PURE block so the web
+ * page and CLI can never drift apart.
+ */
+"use strict";
+const fs = require("fs");
+const path = require("path");
+
+const html = fs.readFileSync(path.join(__dirname, "flight-tracker.html"), "utf8");
+const pure = html.match(/\/\* ===PURE-START===[\s\S]*?===PURE-END=== \*\//);
+if (!pure) { console.error("Could not find logic block in flight-tracker.html"); process.exit(1); }
+(0, eval)(pure[0]); // indirect eval: definitions land in global scope despite strict mode
+/* global callsignCandidates, haversineKm, progressPct, etaText, whereText, withLastKnownSpeed */
+
+// ---- pure CLI helpers (exported for tests) ----
+function barText(pct, width) {
+  const planeCell = 1;
+  const filled = Math.max(0, Math.min(width - planeCell, Math.round((pct / 100) * (width - planeCell))));
+  return "█".repeat(filled) + "✈️ " + "░".repeat(width - planeCell - filled);
+}
+
+function statusLine(ac, route) {
+  const pct = route ? progressPct(route.origin, route.dest, ac) : null;
+  const alt = ac.alt_baro === "ground" ? "on the ground"
+    : ac.alt_baro ? Math.round(ac.alt_baro).toLocaleString("en-US") + " ft" : "—";
+  const spd = ac.gs ? Math.round(ac.gs * 1.852) + " km/h" : "—";
+  return { pct, alt, spd };
+}
+
+if (require.main !== module) {
+  module.exports = { barText, statusLine };
+} else {
+  main();
+}
+
+// ---- networking ----
+async function getJson(url) {
+  const r = await fetch(url, { signal: AbortSignal.timeout(15000) });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+}
+
+async function findAircraft(candidates) {
+  for (const c of candidates) {
+    try {
+      const d = await getJson("https://api.airplanes.live/v2/callsign/" + c);
+      const live = (d.ac || []).filter(a => a.lat != null);
+      if (live.length) return live[0];
+    } catch (e) { /* try next candidate */ }
+  }
+  return null;
+}
+
+async function findRoute(callsign) {
+  try {
+    const d = await getJson("https://api.adsbdb.com/v0/callsign/" + encodeURIComponent(callsign));
+    const fr = d && d.response && d.response.flightroute;
+    if (!fr || !fr.origin || !fr.destination) return null;
+    return {
+      airline: fr.airline && fr.airline.name,
+      origin: { lat: fr.origin.latitude, lon: fr.origin.longitude,
+                code: fr.origin.iata_code || fr.origin.icao_code, name: fr.origin.name },
+      dest:   { lat: fr.destination.latitude, lon: fr.destination.longitude,
+                code: fr.destination.iata_code || fr.destination.icao_code, name: fr.destination.name },
+      icao: fr.callsign_icao
+    };
+  } catch (e) { return null; }
+}
+
+async function geocode(lat, lon) {
+  try {
+    const g = await getJson("https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=" +
+      lat + "&longitude=" + lon + "&localityLanguage=en");
+    return whereText(g);
+  } catch (e) { return ""; }
+}
+
+// ---- rendering ----
+const BAR_WIDTH = 30;
+let drawnLines = 0;
+
+function draw(lines) {
+  if (drawnLines) process.stdout.write("\x1b[" + drawnLines + "A");
+  for (const l of lines) process.stdout.write("\x1b[2K" + l + "\n");
+  drawnLines = lines.length;
+}
+
+function confettiLine() {
+  const bits = ["🎉", "🎊", "✨", "🎈", "🥳"];
+  let s = "";
+  for (let i = 0; i < 12; i++) s += bits[(i * 7) % bits.length] + " ";
+  return s;
+}
+
+// ---- main loop ----
+async function main() {
+  const args = process.argv.slice(2);
+  const once = args.includes("--once");
+  const flightArg = args.find(a => !a.startsWith("-"));
+  if (!flightArg) {
+    console.log("Usage: track <flight-number>   e.g.  track TS123");
+    process.exit(2);
+  }
+
+  const candidates = callsignCandidates(flightArg);
+  let route = null, lastAc = null, where = "", whereAt = null, resolverTried = false;
+
+  if (!once) {
+    process.stdout.write("\x1b[?25l"); // hide cursor
+    process.on("SIGINT", () => { process.stdout.write("\x1b[?25h\n"); process.exit(0); });
+  }
+
+  for (;;) {
+    let ac = await findAircraft(candidates);
+
+    if (!ac && !resolverTried) {
+      resolverTried = true;
+      const r = await findRoute(flightArg.toUpperCase().replace(/[^A-Z0-9]/g, ""));
+      if (r && r.icao && !candidates.includes(r.icao)) {
+        candidates.push(r.icao);
+        route = route || (r.origin.code ? r : null);
+        ac = await findAircraft(candidates);
+      }
+    }
+
+    if (ac) {
+      withLastKnownSpeed(ac, lastAc);
+      lastAc = ac;
+      if (!route) route = await findRoute((ac.flight || "").trim());
+      if (!whereAt || haversineKm(whereAt.lat, whereAt.lon, ac.lat, ac.lon) > 25) {
+        whereAt = { lat: ac.lat, lon: ac.lon };
+        where = await geocode(ac.lat, ac.lon);
+      }
+
+      const s = statusLine(ac, route);
+      const landed = ac.alt_baro === "ground" && route &&
+        haversineKm(ac.lat, ac.lon, route.dest.lat, route.dest.lon) < 50;
+      const pct = landed ? 100 : (s.pct == null ? null : s.pct);
+
+      const head = "✈️  " + (ac.flight || "").trim() +
+        (route && route.airline ? " — " + route.airline : "");
+      const ends = route ? route.origin.code + " 🛫 " : "";
+      const endsR = route ? " 🛬 " + route.dest.code : "";
+      let eta = "";
+      if (route && !landed) {
+        const remaining = haversineKm(ac.lat, ac.lon, route.dest.lat, route.dest.lon);
+        eta = etaText(remaining, ac.gs);
+        if (!eta && ac.alt_baro !== "ground" && ac.alt_baro > 20000) {
+          eta = etaText(remaining, 460).replace("about", "roughly");
+        }
+      }
+
+      const lines = [head];
+      if (pct != null) {
+        lines.push(ends + "[" + barText(pct, BAR_WIDTH) + "]" + endsR +
+          "  " + Math.round(pct) + "%" + (eta ? " · " + eta : ""));
+      }
+      lines.push((where ? where + " · " : "") + "🛩 " + s.alt + " · 💨 " + s.spd);
+
+      if (landed) {
+        lines.push(confettiLine());
+        lines.push("🎉 They've landed at " + (route ? route.dest.name : "the destination") + "!");
+        draw(lines);
+        process.stdout.write("\x1b[?25h");
+        process.exit(0);
+      }
+      draw(lines);
+    } else if (lastAc) {
+      draw(["✈️  " + flightArg.toUpperCase() + " — lost signal for a moment… still watching 👀"]);
+    } else {
+      draw(["🔭 " + flightArg.toUpperCase() +
+        " isn't in the sky yet — watching for takeoff (Ctrl+C to stop)…"]);
+    }
+
+    if (once) { process.exit(ac ? 0 : 1); }
+    await new Promise(res => setTimeout(res, ac ? 15000 : 30000));
+  }
+}
