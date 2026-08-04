@@ -113,7 +113,8 @@ var AIRLINES = {
   NH:"ANA", KE:"KAL", OZ:"AAR", CI:"CAL", BR:"EVA", TG:"THA", MH:"MAS", GA:"GIA",
   AI:"AIC", "6E":"IGO", UK:"VTI", SG:"SEJ", CA:"CCA", MU:"CES", CZ:"CSN", HU:"CHH",
   AM:"AMX", CM:"CMP", AV:"AVA", LA:"LAN", AZ:"ITY", VN:"HVN", PR:"PAL", WY:"OMA",
-  GF:"GFA", RJ:"RJA", LY:"ELY", DE:"CFG", EW:"EWG", W6:"WZZ", VY:"VLG", PC:"PGT"
+  GF:"GFA", RJ:"RJA", LY:"ELY", DE:"CFG", EW:"EWG", W6:"WZZ", VY:"VLG", PC:"PGT",
+  TS:"TSC", PD:"POE", F8:"FLE", WG:"SWG"
 };
 
 // "ua123" -> ["UAL123", "UA123"]; raw callsigns pass through.
@@ -292,8 +293,25 @@ if (typeof module !== "undefined") {
     confettiBurst();
   }
 
+  // Airline code not in our table? adsbdb can translate e.g. TS123 -> TSC123.
+  function resolveCallsign(input) {
+    var raw = String(input || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    return fetchJson("https://api.adsbdb.com/v0/callsign/" + encodeURIComponent(raw))
+      .then(function (res) {
+        var fr = res && res.response && res.response.flightroute;
+        return fr && fr.callsign_icao ? fr.callsign_icao : null;
+      }).catch(function () { return null; });
+  }
+
   function poll(candidates) {
     findAircraft(candidates).then(function (ac) {
+      if (!ac && !state.resolverTried) {
+        state.resolverTried = true;
+        return resolveCallsign(input.value).then(function (cs) {
+          if (cs && candidates.indexOf(cs) === -1) candidates.push(cs);
+          poll(candidates);
+        });
+      }
       if (!ac) {
         if (state.lastAc && state.route && nearDestination(state.lastAc) &&
             (state.lastAc.alt_baro === "ground" || state.lastAc.alt_baro < 3000)) {
@@ -344,7 +362,7 @@ if (typeof module !== "undefined") {
       if (state.planeMarker) state.map.removeLayer(state.planeMarker);
     }
     state.planeMarker = null; state.routeDrawn = false; state.route = null;
-    state.lastAc = null; state.landed = false; state.layers = [];
+    state.lastAc = null; state.landed = false; state.layers = []; state.resolverTried = false;
     document.getElementById("banner").style.display = "none";
     document.getElementById("funCard").style.display = "none";
     setStatus("Scanning the skies… 🔭");
@@ -392,6 +410,7 @@ if (typeof module !== "undefined") {
     check("UA123 → UAL123 first", callsignCandidates("ua123")[0] === "UAL123");
     check("UA0123 strips zeros", callsignCandidates("UA0123").indexOf("UAL123") === 0);
     check("raw callsign passes through", callsignCandidates("BAW42").indexOf("BAW42") !== -1);
+    check("TS123 → TSC123 (Air Transat)", callsignCandidates("TS123")[0] === "TSC123");
     check("unknown airline falls back to raw", callsignCandidates("ZZ999")[0] === "ZZ999");
     check("empty input → no candidates", callsignCandidates("").length === 0);
     var d = haversineKm(37.6189, -122.375, 51.4706, -0.4619);
