@@ -37,8 +37,13 @@ routeset endpoint currently returns empty responses — verified 2026-08-04.)
 ## Screen
 
 - **Header:** playful title + flight number input + Track button.
-- **Map (Leaflet):** plane icon (SVG, rotated to actual heading), great-circle
-  route line, origin/destination airport markers. Auto-fits route on first load.
+- **Map (Leaflet):** plane icon (SVG, rotated to actual heading) and
+  origin/destination airport markers; auto-fits the route area on first load.
+  (A dashed route line existed originally; removed 2026-08-04 by user request.)
+- **One-screen layout:** the page is a flex column sized to the viewport — the
+  map flexes to fill leftover space, the where-are-they pill overlays the map's
+  bottom edge, and the landed banner floats above the page, so the normal
+  tracking view never scrolls.
 - **Fun strip:** cartoon progress bar — `SFO ✈️ ─────── 🛬 LHR` with the plane
   emoji sliding along; "62% there · about 3h 40m to go" (remaining great-circle
   distance ÷ current ground speed); live altitude and speed readouts.
@@ -61,7 +66,7 @@ Polling stops after landing.
   (Google Fonts CDN) for the title and fun line.
 - **Where-are-they pill:** each refresh (only when the plane has moved > 25 km),
   the plane's coordinates go to BigDataCloud's keyless reverse-geocode API
-  (CORS `*`); a pill under the map shows "🌍 Currently over Wales, United
+  (CORS `*`); a pill overlaid on the map shows "🌍 Currently over Wales, United
   Kingdom" or "🌊 Somewhere over the Atlantic Ocean". Lookup failure hides the
   pill; tracking is unaffected.
 

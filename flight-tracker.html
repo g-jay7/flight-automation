@@ -64,12 +64,14 @@
   @media (prefers-reduced-motion: reduce) {
     .cloud, #skyOrb, #stars i, #barPlane { animation: none !important; }
   }
-  .wrap { max-width: 860px; margin: 0 auto; padding: 18px 14px 40px; }
-  header { text-align: center; margin-bottom: 14px; }
-  header h1 { margin: 6px 0 2px; font-size: 1.9rem; font-family: "Fredoka", "Avenir Next", sans-serif; font-weight: 600; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 10px 14px;
+    display: flex; flex-direction: column; height: 100dvh; }
+  header { text-align: center; margin-bottom: 4px; }
+  header h1 { margin: 2px 0; font-size: 1.5rem; font-family: "Fredoka", "Avenir Next", sans-serif; font-weight: 600; }
+  header p { font-size: .85rem; }
   header h1 .bobber { display: inline-block; animation: bob 3s ease-in-out infinite; }
   header p { margin: 0; opacity: .75; }
-  .searchbar { display: flex; gap: 8px; justify-content: center; margin: 14px 0; }
+  .searchbar { display: flex; gap: 8px; justify-content: center; margin: 8px 0; }
   .searchbar input {
     font-size: 1.15rem; padding: 10px 14px; border: 2px solid #fff;
     border-radius: 12px; width: 220px; text-transform: uppercase;
@@ -86,17 +88,17 @@
   #status { text-align: center; min-height: 1.4em; font-weight: 600; }
   #status.err { color: #b3261e; }
   #map {
-    height: 46vh; min-height: 300px; border-radius: 16px;
-    box-shadow: 0 4px 18px rgba(0,0,0,.15); margin-top: 12px;
+    flex: 1 1 auto; min-height: 200px; border-radius: 16px;
+    box-shadow: 0 4px 18px rgba(0,0,0,.15); margin-top: 8px;
     display: none;
   }
   .card {
-    background: #fff; border-radius: 16px; padding: 16px 18px; margin-top: 14px;
-    box-shadow: 0 4px 18px rgba(0,0,0,.12); display: none;
+    background: #fff; border-radius: 16px; padding: 10px 16px; margin-top: 10px;
+    box-shadow: 0 4px 18px rgba(0,0,0,.12); display: none; flex-shrink: 0;
   }
-  .route-row { display: flex; justify-content: space-between; font-weight: 700; font-size: 1.05rem; }
+  .route-row { display: flex; justify-content: space-between; font-weight: 700; font-size: .95rem; }
   .bar-track {
-    position: relative; height: 34px; margin: 10px 0 4px;
+    position: relative; height: 30px; margin: 6px 0 2px;
     border-bottom: 3px dotted #b8cbe0;
   }
   #barPlane {
@@ -104,11 +106,13 @@
     transition: left 1.2s ease;
   }
   .bar-ends { display: flex; justify-content: space-between; font-size: 1.2rem; }
-  #funLine { text-align: center; font-size: 1.2rem; font-weight: 600; margin: 10px 0 4px;
+  #funLine { text-align: center; font-size: 1.1rem; font-weight: 600; margin: 6px 0 2px;
     font-family: "Fredoka", "Avenir Next", sans-serif; }
+  #liveLine { font-size: .9rem; }
   #wherePill {
-    display: none; width: fit-content; margin: 12px auto 0; padding: 8px 18px;
-    background: rgba(255,255,255,.85); border-radius: 999px; font-weight: 600;
+    display: none; width: fit-content; margin: -46px auto 10px; padding: 7px 16px;
+    position: relative; z-index: 1000; font-size: .9rem;
+    background: rgba(255,255,255,.88); border-radius: 999px; font-weight: 600;
     color: #1d2a3a; box-shadow: 0 3px 12px rgba(0,0,0,.12); backdrop-filter: blur(4px);
   }
   #barPlane { animation: barBob 2.5s ease-in-out infinite; }
@@ -119,8 +123,11 @@
   #liveLine { text-align: center; opacity: .75; }
   #banner {
     display: none; text-align: center; font-size: 2rem; font-weight: 800;
-    background: #fff; border-radius: 16px; padding: 22px; margin-top: 14px;
-    box-shadow: 0 4px 18px rgba(0,0,0,.15);
+    font-family: "Fredoka", "Avenir Next", sans-serif; color: #1d2a3a;
+    background: #fff; border-radius: 16px; padding: 22px 34px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.25);
+    position: fixed; left: 50%; top: 42%; transform: translate(-50%, -50%);
+    z-index: 2000;
   }
   #confetti { position: fixed; inset: 0; pointer-events: none; z-index: 9999; }
   #testout { background: #fff; border-radius: 12px; padding: 14px; margin-top: 14px;
@@ -367,7 +374,6 @@ if (typeof module !== "undefined") {
     for (var i = 0; i <= 64; i++) {
       pts.push(gcPoint(route.origin.lat, route.origin.lon, route.dest.lat, route.dest.lon, i / 64));
     }
-    state.layers.push(L.polyline(pts, { color: "#ff6b35", weight: 3, dashArray: "6 8", opacity: .8 }).addTo(state.map));
     state.layers.push(L.marker([route.origin.lat, route.origin.lon],
       { icon: L.divIcon({ className: "", html: "🛫", iconSize: [24, 24] }) }).addTo(state.map));
     state.layers.push(L.marker([route.dest.lat, route.dest.lon],
