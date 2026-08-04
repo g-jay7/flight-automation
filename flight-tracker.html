@@ -5,12 +5,27 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>✈️ Where's My Flight?</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&display=swap">
 <style>
   :root {
     --ink: #1d2a3a;
     --accent: #ff6b35;
     --sky1: #8ec9f5;
     --sky2: #dff1ff;
+    --cloud-op: .85;
+  }
+  body.dusk {
+    --ink: #2b1f3f;
+    --sky1: #9377c9;
+    --sky2: #ffc9a3;
+    --cloud-op: .55;
+  }
+  body.night {
+    --ink: #e8eefc;
+    --sky1: #101b33;
+    --sky2: #2a3b63;
+    --cloud-op: .18;
   }
   * { box-sizing: border-box; }
   body {
@@ -19,10 +34,40 @@
     color: var(--ink);
     background: linear-gradient(180deg, var(--sky1), var(--sky2) 60%);
     min-height: 100vh;
+    overflow-x: hidden;
+    transition: color .8s;
+  }
+  /* --- living sky --- */
+  .sky { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+  .cloud { position: absolute; opacity: var(--cloud-op); animation: drift linear infinite; }
+  .cloud.c1 { top: 8%;  font-size: 90px;  animation-duration: 95s; }
+  .cloud.c2 { top: 26%; font-size: 55px;  animation-duration: 65s; animation-delay: -30s; }
+  .cloud.c3 { top: 55%; font-size: 120px; animation-duration: 140s; animation-delay: -80s; }
+  .cloud.c4 { top: 74%; font-size: 45px;  animation-duration: 80s; animation-delay: -55s; }
+  @keyframes drift {
+    from { transform: translateX(-160px); }
+    to   { transform: translateX(105vw); }
+  }
+  #skyOrb {
+    position: fixed; top: 18px; right: 22px; font-size: 44px; z-index: 0;
+    pointer-events: none; animation: bob 5s ease-in-out infinite;
+  }
+  #stars { position: fixed; inset: 0; pointer-events: none; z-index: 0; display: none; }
+  body.night #stars { display: block; }
+  #stars i {
+    position: absolute; width: 2px; height: 2px; border-radius: 50%;
+    background: #fff; animation: twinkle 3s ease-in-out infinite;
+  }
+  @keyframes twinkle { 0%,100% { opacity: .9; } 50% { opacity: .25; } }
+  @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+  .wrap { position: relative; z-index: 1; }
+  @media (prefers-reduced-motion: reduce) {
+    .cloud, #skyOrb, #stars i, #barPlane { animation: none !important; }
   }
   .wrap { max-width: 860px; margin: 0 auto; padding: 18px 14px 40px; }
   header { text-align: center; margin-bottom: 14px; }
-  header h1 { margin: 6px 0 2px; font-size: 1.7rem; }
+  header h1 { margin: 6px 0 2px; font-size: 1.9rem; font-family: "Fredoka", "Avenir Next", sans-serif; font-weight: 600; }
+  header h1 .bobber { display: inline-block; animation: bob 3s ease-in-out infinite; }
   header p { margin: 0; opacity: .75; }
   .searchbar { display: flex; gap: 8px; justify-content: center; margin: 14px 0; }
   .searchbar input {
@@ -30,6 +75,7 @@
     border-radius: 12px; width: 220px; text-transform: uppercase;
     outline: none; box-shadow: 0 2px 10px rgba(0,0,0,.08);
   }
+  .searchbar input::placeholder { text-transform: none; }
   .searchbar input:focus { border-color: var(--accent); }
   .searchbar button {
     font-size: 1.05rem; font-weight: 700; padding: 10px 18px; border: none;
@@ -58,7 +104,18 @@
     transition: left 1.2s ease;
   }
   .bar-ends { display: flex; justify-content: space-between; font-size: 1.2rem; }
-  #funLine { text-align: center; font-size: 1.15rem; font-weight: 700; margin: 10px 0 4px; }
+  #funLine { text-align: center; font-size: 1.2rem; font-weight: 600; margin: 10px 0 4px;
+    font-family: "Fredoka", "Avenir Next", sans-serif; }
+  #wherePill {
+    display: none; width: fit-content; margin: 12px auto 0; padding: 8px 18px;
+    background: rgba(255,255,255,.85); border-radius: 999px; font-weight: 600;
+    color: #1d2a3a; box-shadow: 0 3px 12px rgba(0,0,0,.12); backdrop-filter: blur(4px);
+  }
+  #barPlane { animation: barBob 2.5s ease-in-out infinite; }
+  @keyframes barBob {
+    0%,100% { transform: translate(-50%, 0); }
+    50%     { transform: translate(-50%, -5px); }
+  }
   #liveLine { text-align: center; opacity: .75; }
   #banner {
     display: none; text-align: center; font-size: 2rem; font-weight: 800;
@@ -72,9 +129,17 @@
 </style>
 </head>
 <body>
+<div class="sky" aria-hidden="true">
+  <span class="cloud c1">☁️</span>
+  <span class="cloud c2">☁️</span>
+  <span class="cloud c3">☁️</span>
+  <span class="cloud c4">☁️</span>
+</div>
+<div id="stars" aria-hidden="true"></div>
+<span id="skyOrb" aria-hidden="true">☀️</span>
 <div class="wrap">
   <header>
-    <h1>✈️ Where's My Flight?</h1>
+    <h1><span class="bobber">✈️</span> Where's My Flight?</h1>
     <p>Type a flight number and watch them fly to you</p>
   </header>
 
@@ -85,6 +150,7 @@
 
   <div id="status"></div>
   <div id="map"></div>
+  <div id="wherePill"></div>
 
   <div class="card" id="funCard">
     <div class="route-row"><span id="fromName"></span><span id="toName"></span></div>
@@ -175,10 +241,31 @@ function etaText(remainingKm, gsKnots) {
   return "about " + Math.floor(mins / 60) + "h " + (mins % 60) + "m to go";
 }
 
+// Local hour -> sky mood.
+function skyPhase(hour) {
+  if (hour >= 21 || hour < 5) return "night";
+  if (hour >= 17 || hour < 7) return "dusk";
+  return "day";
+}
+
+// BigDataCloud reverse-geocode result -> "where are they" line.
+function whereText(geo) {
+  if (!geo) return "";
+  var place = geo.locality || geo.city ||
+    (geo.principalSubdivision || "").replace(/\s*\[.*$/, "");
+  if (!geo.countryCode) return place ? "🌊 Somewhere over the " + place : "";
+  var country = "";
+  try { country = new Intl.DisplayNames(["en"], { type: "region" }).of(geo.countryCode) || ""; }
+  catch (e) { country = geo.countryCode; }
+  if (place) return "🌍 Currently over " + place + ", " + country;
+  return country ? "🌍 Currently over " + country : "";
+}
+
 /* ===PURE-END=== */
 if (typeof module !== "undefined") {
   module.exports = { callsignCandidates: callsignCandidates, haversineKm: haversineKm,
-    gcPoint: gcPoint, progressPct: progressPct, etaText: etaText };
+    gcPoint: gcPoint, progressPct: progressPct, etaText: etaText,
+    skyPhase: skyPhase, whereText: whereText };
 }
 </script>
 <script>
@@ -222,6 +309,37 @@ if (typeof module !== "undefined") {
         return { origin: { lat: o.latitude, lon: o.longitude, code: o.iata_code || o.icao_code, name: o.name },
                  dest:   { lat: d.latitude, lon: d.longitude, code: d.iata_code || d.icao_code, name: d.name } };
       }).catch(function () { return null; });
+  }
+
+  function applySky() {
+    var phase = skyPhase(new Date().getHours());
+    document.body.className = phase === "day" ? "" : phase;
+    document.getElementById("skyOrb").textContent =
+      phase === "night" ? "🌙" : phase === "dusk" ? "🌤️" : "☀️";
+  }
+
+  function makeStars() {
+    var box = document.getElementById("stars");
+    for (var i = 0; i < 70; i++) {
+      var s = document.createElement("i");
+      s.style.left = Math.random() * 100 + "%";
+      s.style.top = Math.random() * 100 + "%";
+      s.style.animationDelay = (Math.random() * 3) + "s";
+      box.appendChild(s);
+    }
+  }
+
+  function maybeGeocode(ac) {
+    if (state.geoAt && haversineKm(state.geoAt.lat, state.geoAt.lon, ac.lat, ac.lon) < 25) return;
+    state.geoAt = { lat: ac.lat, lon: ac.lon };
+    fetchJson("https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=" +
+              ac.lat + "&longitude=" + ac.lon + "&localityLanguage=en")
+      .then(function (geo) {
+        var text = whereText(geo);
+        var pill = document.getElementById("wherePill");
+        if (text) { pill.textContent = text; pill.style.display = "block"; }
+      })
+      .catch(function () {});
   }
 
   function ensureMap() {
@@ -325,6 +443,8 @@ if (typeof module !== "undefined") {
       }
       var first = !state.lastAc;
       state.lastAc = ac;
+      applySky();
+      maybeGeocode(ac);
       ensureMap();
       var pos = [ac.lat, ac.lon];
       if (!state.planeMarker) {
@@ -363,8 +483,10 @@ if (typeof module !== "undefined") {
     }
     state.planeMarker = null; state.routeDrawn = false; state.route = null;
     state.lastAc = null; state.landed = false; state.layers = []; state.resolverTried = false;
+    state.geoAt = null;
     document.getElementById("banner").style.display = "none";
     document.getElementById("funCard").style.display = "none";
+    document.getElementById("wherePill").style.display = "none";
     setStatus("Scanning the skies… 🔭");
     poll(candidates);
     state.timer = setInterval(function () { if (!state.landed) poll(candidates); }, POLL_MS);
@@ -372,6 +494,8 @@ if (typeof module !== "undefined") {
 
   document.getElementById("trackBtn").addEventListener("click", startTracking);
   input.addEventListener("keydown", function (e) { if (e.key === "Enter") startTracking(); });
+  applySky();
+  makeStars();
 
   // --- confetti (hand-rolled, no library) ---
   function confettiBurst() {
@@ -425,6 +549,12 @@ if (typeof module !== "undefined") {
     check("eta hours format", etaText(1852, 500) === "about 2h 0m to go");
     check("eta minutes format", etaText(100, 400) === "about 8m to go");
     check("eta hidden when slow/taxiing", etaText(100, 10) === "");
+    check("3am is night", skyPhase(3) === "night");
+    check("6pm is dusk", skyPhase(18) === "dusk");
+    check("noon is day", skyPhase(12) === "day");
+    check("ocean where-line", whereText({ locality: "Atlantic Ocean", countryCode: "" }) === "🌊 Somewhere over the Atlantic Ocean");
+    check("land where-line", whereText({ locality: "Llanwenog", countryCode: "GB" }) === "🌍 Currently over Llanwenog, United Kingdom");
+    check("empty geo → empty line", whereText(null) === "");
     var el = document.getElementById("testout");
     el.style.display = "block";
     el.textContent = out.join("\n");

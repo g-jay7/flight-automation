@@ -51,6 +51,20 @@ show a "They've landed! 🎉" banner and fire hand-rolled canvas confetti.
 On-ground at the *origin* (taxiing before takeoff) does not trigger it.
 Polling stops after landing.
 
+## Living sky & where-are-they (added 2026-08-04, approved)
+
+- **Living sky:** emoji clouds drifting at three speeds behind the content, a
+  bobbing ✈️ in the title, a sun/moon orb top-right, and a palette that follows
+  the viewer's local clock — day (blue), dusk (violet/peach, 17:00–21:00 and
+  05:00–07:00), night (navy + twinkling star field, 21:00–05:00). Pure CSS
+  animation; `prefers-reduced-motion` disables all of it. Display font: Fredoka
+  (Google Fonts CDN) for the title and fun line.
+- **Where-are-they pill:** each refresh (only when the plane has moved > 25 km),
+  the plane's coordinates go to BigDataCloud's keyless reverse-geocode API
+  (CORS `*`); a pill under the map shows "🌍 Currently over Wales, United
+  Kingdom" or "🌊 Somewhere over the Atlantic Ocean". Lookup failure hides the
+  pill; tracking is unaffected.
+
 ## Error handling
 
 - **No aircraft found:** "I can't see this flight in the sky right now — it may
