@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>✈️ Where's My Flight? — stickers</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&display=swap">
+<style>
+  :root {
+    --ink: #1d2a3a;
+    --accent: #ff6b35;
+    --sky1: #8ec9f5;
+    --sky2: #dff1ff;
+    --cloud-op: .85;
+  }
+  body.dusk {
+    --ink: #2b1f3f;
+    --sky1: #9377c9;
+    --sky2: #ffc9a3;
+    --cloud-op: .55;
+  }
+  body.night {
+    --ink: #e8eefc;
+    --sky1: #101b33;
+    --sky2: #2a3b63;
+    --cloud-op: .18;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    color: var(--ink);
+    background: linear-gradient(180deg, var(--sky1), var(--sky2) 60%);
+    min-height: 100vh;
+    overflow-x: hidden;
+    transition: color .8s;
+  }
+  /* --- living sky --- */
+  .sky { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+  .cloud { position: absolute; opacity: var(--cloud-op); animation: drift linear infinite; }
+  .cloud.c1 { top: 8%;  font-size: 90px;  animation-duration: 95s; }
+  .cloud.c2 { top: 26%; font-size: 55px;  animation-duration: 65s; animation-delay: -30s; }
+  .cloud.c3 { top: 55%; font-size: 120px; animation-duration: 140s; animation-delay: -80s; }
+  .cloud.c4 { top: 74%; font-size: 45px;  animation-duration: 80s; animation-delay: -55s; }
+  @keyframes drift {
+    from { transform: translateX(-160px); }
+    to   { transform: translateX(105vw); }
+  }
+  #skyOrb {
+    position: fixed; top: 18px; right: 22px; font-size: 44px; z-index: 0;
+    pointer-events: none; animation: bob 5s ease-in-out infinite;
+  }
+  #stars { position: fixed; inset: 0; pointer-events: none; z-index: 0; display: none; }
+  body.night #stars { display: block; }
+  #stars i {
+    position: absolute; width: 2px; height: 2px; border-radius: 50%;
+    background: #fff; animation: twinkle 3s ease-in-out infinite;
+  }
+  @keyframes twinkle { 0%,100% { opacity: .9; } 50% { opacity: .25; } }
+  @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+  .wrap { position: relative; z-index: 1; }
+  @media (prefers-reduced-motion: reduce) {
+    .cloud, #skyOrb, #stars i, #barPlane { animation: none !important; }
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 10px 14px;
+    display: flex; flex-direction: column; height: 100dvh; }
+  header { text-align: center; margin-bottom: 4px; }
+  header h1 { margin: 2px 0; font-size: 1.5rem; font-family: "Fredoka", "Avenir Next", sans-serif; font-weight: 600; }
+  header p { font-size: .85rem; }
+  header h1 .bobber { display: inline-block; animation: bob 3s ease-in-out infinite; }
+  header p { margin: 0; opacity: .75; }
+  .searchbar { display: flex; gap: 8px; justify-content: center; margin: 8px 0; }
+  .searchbar input {
+    font-size: 1.15rem; padding: 10px 14px; border: 2px solid #fff;
+    border-radius: 12px; width: 220px; text-transform: uppercase;
+    outline: none; box-shadow: 0 2px 10px rgba(0,0,0,.08);
+  }
+  .searchbar input::placeholder { text-transform: none; }
+  .searchbar input:focus { border-color: var(--accent); }
+  .searchbar button {
+    font-size: 1.05rem; font-weight: 700; padding: 10px 18px; border: none;
+    border-radius: 12px; background: var(--accent); color: #fff; cursor: pointer;
+    box-shadow: 0 2px 10px rgba(0,0,0,.15);
+  }
+  .searchbar button:active { transform: scale(.97); }
+  #status { text-align: center; min-height: 1.4em; font-weight: 600; }
+  #status.err { color: #b3261e; }
+  #map {
+    flex: 1 1 auto; min-height: 200px; border-radius: 16px;
+    box-shadow: 0 4px 18px rgba(0,0,0,.15); margin-top: 8px;
+    display: none;
+  }
+  .card {
+    background: #fff; border-radius: 16px; padding: 10px 16px; margin-top: 10px;
+    box-shadow: 0 4px 18px rgba(0,0,0,.12); display: none; flex-shrink: 0;
+  }
+  .route-row { display: flex; justify-content: space-between; font-weight: 700; font-size: .95rem; }
+  .bar-track {
+    position: relative; height: 30px; margin: 6px 0 2px;
+    border-bottom: 3px dotted #b8cbe0;
+  }
+  #barPlane {
+    position: absolute; top: 0; font-size: 26px; transform: translateX(-50%);
+    transition: left 1.2s ease;
+  }
+  .bar-ends { display: flex; justify-content: space-between; font-size: 1.2rem; }
+  #funLine { text-align: center; font-size: 1.1rem; font-weight: 600; margin: 6px 0 2px;
+    font-family: "Fredoka", "Avenir Next", sans-serif; }
+  #liveLine { font-size: .9rem; }
+  #wherePill {
+    display: none; width: fit-content; margin: -46px auto 10px; padding: 7px 16px;
+    position: relative; z-index: 1000; font-size: .9rem;
+    background: rgba(255,255,255,.88); border-radius: 999px; font-weight: 600;
+    color: #1d2a3a; box-shadow: 0 3px 12px rgba(0,0,0,.12); backdrop-filter: blur(4px);
+  }
+  #barPlane { animation: barBob 2.5s ease-in-out infinite; }
+  @keyframes barBob {
+    0%,100% { transform: translate(-50%, 0); }
+    50%     { transform: translate(-50%, -5px); }
+  }
+  #liveLine { text-align: center; opacity: .75; }
+  #banner {
+    display: none; text-align: center; font-size: 2rem; font-weight: 800;
+    font-family: "Fredoka", "Avenir Next", sans-serif; color: #1d2a3a;
+    background: #fff; border-radius: 16px; padding: 22px 34px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.25);
+    position: fixed; left: 50%; top: 42%; transform: translate(-50%, -50%);
+    z-index: 2000;
+  }
+  #confetti { position: fixed; inset: 0; pointer-events: none; z-index: 9999; }
+  #testout { background: #fff; border-radius: 12px; padding: 14px; margin-top: 14px;
+    font-family: monospace; white-space: pre-wrap; display: none; }
+  .plane-icon { filter: drop-shadow(0 1px 2px rgba(0,0,0,.4)); }
+</style>
+<style id="skin">
+/* ── skin: sticker book ── */
+body::after { content: ""; position: fixed; left: -40px; right: -40px; bottom: -46px;
+  height: 120px; z-index: 0; pointer-events: none;
+  background: radial-gradient(circle 70px at 10% 100%, rgba(255,255,255,.75) 98%, transparent),
+              radial-gradient(circle 90px at 32% 110%, rgba(255,255,255,.6) 98%, transparent),
+              radial-gradient(circle 65px at 55% 100%, rgba(255,255,255,.75) 98%, transparent),
+              radial-gradient(circle 95px at 78% 112%, rgba(255,255,255,.6) 98%, transparent),
+              radial-gradient(circle 70px at 97% 100%, rgba(255,255,255,.75) 98%, transparent); }
+header h1 { font-size: 1.7rem; color: #fff;
+  text-shadow: -2px -2px 0 #1d2a3a, 2px -2px 0 #1d2a3a, -2px 2px 0 #1d2a3a,
+    2px 2px 0 #1d2a3a, 0 4px 0 #1d2a3a; }
+.searchbar input { border: 3px solid #1d2a3a; border-radius: 14px;
+  box-shadow: 0 4px 0 #1d2a3a; }
+.searchbar input:focus { border-color: #1d2a3a; background: #fffbe8; }
+.searchbar button { border: 3px solid #1d2a3a; border-radius: 14px;
+  box-shadow: 0 4px 0 #1d2a3a; font-family: "Fredoka", sans-serif; }
+.searchbar button:active { transform: translateY(3px); box-shadow: 0 1px 0 #1d2a3a; }
+#map { border: 3px solid #1d2a3a; border-radius: 18px; box-shadow: 0 5px 0 #1d2a3a; }
+.card { border: 3px solid #1d2a3a; border-radius: 18px; box-shadow: 0 5px 0 #1d2a3a; }
+.bar-track { border-bottom: 4px dashed #1d2a3a; }
+#barPlane { font-size: 30px; }
+#wherePill { border: 3px solid #1d2a3a; box-shadow: 0 3px 0 #1d2a3a;
+  background: #fff; }
+#banner { border: 4px solid #1d2a3a; border-radius: 22px; box-shadow: 0 6px 0 #1d2a3a; }
+body.night #wherePill, body.night .searchbar input { background: #e8eefc; }
+</style>
+</head>
+<body>
+<div class="sky" aria-hidden="true">
+  <span class="cloud c1">☁️</span>
+  <span class="cloud c2">☁️</span>
+  <span class="cloud c3">☁️</span>
+  <span class="cloud c4">☁️</span>
+</div>
+<div id="stars" aria-hidden="true"></div>
+<span id="skyOrb" aria-hidden="true">☀️</span>
+<div class="wrap">
+  <header>
+    <h1><span class="bobber">✈️</span> Where's My Flight?</h1>
+    <p>type a flight number and watch them fly to you</p>
+  </header>
+
+  <div class="searchbar">
+    <input id="flightInput" placeholder="e.g. UA123" autocomplete="off" spellcheck="false">
+    <button id="trackBtn">Track ✈️</button>
+  </div>
+
+  <div id="status"></div>
+  <div id="map"></div>
+  <div id="wherePill"></div>
+
+  <div class="card" id="funCard">
+    <div class="route-row"><span id="fromName"></span><span id="toName"></span></div>
+    <div class="bar-track"><span id="barPlane">✈️</span></div>
+    <div class="bar-ends"><span id="fromCode"></span><span>🛬 <span id="toCode"></span></span></div>
+    <div id="funLine"></div>
+    <div id="liveLine"></div>
+  </div>
+
+  <div id="banner">They've landed! 🎉</div>
+  <pre id="testout"></pre>
+</div>
+<canvas id="confetti"></canvas>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* ===PURE-START=== (logic with no browser/network dependencies — self-tested) */
+
+// Common airline IATA -> ICAO callsign prefixes.
+var AIRLINES = {
+  UA:"UAL", AA:"AAL", DL:"DAL", WN:"SWA", AS:"ASA", B6:"JBU", NK:"NKS", F9:"FFT",
+  HA:"HAL", AC:"ACA", WS:"WJA", BA:"BAW", VS:"VIR", LH:"DLH", AF:"AFR", KL:"KLM",
+  IB:"IBE", EI:"EIN", FR:"RYR", U2:"EZY", LX:"SWR", OS:"AUA", SN:"BEL", SK:"SAS",
+  AY:"FIN", TP:"TAP", LO:"LOT", TK:"THY", EK:"UAE", EY:"ETD", QR:"QTR", SV:"SVA",
+  ET:"ETH", MS:"MSR", QF:"QFA", NZ:"ANZ", VA:"VOZ", SQ:"SIA", CX:"CPA", JL:"JAL",
+  NH:"ANA", KE:"KAL", OZ:"AAR", CI:"CAL", BR:"EVA", TG:"THA", MH:"MAS", GA:"GIA",
+  AI:"AIC", "6E":"IGO", UK:"VTI", SG:"SEJ", CA:"CCA", MU:"CES", CZ:"CSN", HU:"CHH",
+  AM:"AMX", CM:"CMP", AV:"AVA", LA:"LAN", AZ:"ITY", VN:"HVN", PR:"PAL", WY:"OMA",
+  GF:"GFA", RJ:"RJA", LY:"ELY", DE:"CFG", EW:"EWG", W6:"WZZ", VY:"VLG", PC:"PGT",
+  TS:"TSC", PD:"POE", F8:"FLE", WG:"SWG"
+};
+
+// "ua123" -> ["UAL123", "UA123"]; raw callsigns pass through.
+function callsignCandidates(input) {
+  var s = String(input || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (!s) return [];
+  var out = [];
+  var m = s.match(/^([A-Z0-9]{2})(\d{1,4}[A-Z]?)$/);
+  if (m && AIRLINES[m[1]]) {
+    var num = m[2];
+    var stripped = num.replace(/^0+(?=\d)/, "");
+    out.push(AIRLINES[m[1]] + stripped);
+    if (stripped !== num) out.push(AIRLINES[m[1]] + num);
+  }
+  out.push(s);
+  return out.filter(function (v, i) { return out.indexOf(v) === i; });
+}
+
+function toRad(d) { return d * Math.PI / 180; }
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  var R = 6371;
+  var dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+  var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+          Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+// Point at fraction f along the great circle between two coords.
+function gcPoint(lat1, lon1, lat2, lon2, f) {
+  var p1 = toRad(lat1), l1 = toRad(lon1), p2 = toRad(lat2), l2 = toRad(lon2);
+  var d = 2 * Math.asin(Math.sqrt(
+    Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin((l2 - l1) / 2) ** 2));
+  if (d === 0) return [lat1, lon1];
+  var A = Math.sin((1 - f) * d) / Math.sin(d), B = Math.sin(f * d) / Math.sin(d);
+  var x = A * Math.cos(p1) * Math.cos(l1) + B * Math.cos(p2) * Math.cos(l2);
+  var y = A * Math.cos(p1) * Math.sin(l1) + B * Math.cos(p2) * Math.sin(l2);
+  var z = A * Math.sin(p1) + B * Math.sin(p2);
+  return [Math.atan2(z, Math.sqrt(x * x + y * y)) * 180 / Math.PI,
+          Math.atan2(y, x) * 180 / Math.PI];
+}
+
+// % of the trip completed, based on distance still to go, clamped to [0, 100].
+function progressPct(origin, dest, plane) {
+  var total = haversineKm(origin.lat, origin.lon, dest.lat, dest.lon);
+  if (total < 1) return 100;
+  var remaining = haversineKm(plane.lat, plane.lon, dest.lat, dest.lon);
+  return Math.max(0, Math.min(100, (1 - remaining / total) * 100));
+}
+
+// "about 3h 40m to go" from km remaining and ground speed in knots.
+function etaText(remainingKm, gsKnots) {
+  if (!gsKnots || gsKnots < 50) return "";
+  var mins = Math.round(remainingKm / (gsKnots * 1.852) * 60);
+  if (mins < 2) return "almost there!";
+  if (mins < 60) return "about " + mins + "m to go";
+  return "about " + Math.floor(mins / 60) + "h " + (mins % 60) + "m to go";
+}
+
+// Satellite (ADS-C) position reports over oceans omit ground speed;
+// keep the last known speed so the ETA doesn't vanish mid-Atlantic.
+function withLastKnownSpeed(ac, last) {
+  if (ac && ac.gs == null && last && last.gs != null) ac.gs = last.gs;
+  return ac;
+}
+
+// Local hour -> sky mood.
+function skyPhase(hour) {
+  if (hour >= 21 || hour < 5) return "night";
+  if (hour >= 17 || hour < 7) return "dusk";
+  return "day";
+}
+
+// BigDataCloud reverse-geocode result -> "where are they" line.
+function whereText(geo) {
+  if (!geo) return "";
+  var place = geo.locality || geo.city ||
+    (geo.principalSubdivision || "").replace(/\s*\[.*$/, "");
+  if (!geo.countryCode) return place ? "🌊 Somewhere over the " + place : "";
+  var country = "";
+  try { country = new Intl.DisplayNames(["en"], { type: "region" }).of(geo.countryCode) || ""; }
+  catch (e) { country = geo.countryCode; }
+  if (place) return "🌍 Currently over " + place + ", " + country;
+  return country ? "🌍 Currently over " + country : "";
+}
+
+/* ===PURE-END=== */
+if (typeof module !== "undefined") {
+  module.exports = { callsignCandidates: callsignCandidates, haversineKm: haversineKm,
+    gcPoint: gcPoint, progressPct: progressPct, etaText: etaText,
+    skyPhase: skyPhase, whereText: whereText, withLastKnownSpeed: withLastKnownSpeed };
+}
+</script>
+<script>
+(function () {
+  var POLL_MS = 15000;
+  var statusEl = document.getElementById("status");
+  var input = document.getElementById("flightInput");
+  var state = { timer: null, map: null, planeMarker: null, routeDrawn: false,
+                route: null, lastAc: null, landed: false, layers: [] };
+
+  function setStatus(msg, isErr) {
+    statusEl.textContent = msg;
+    statusEl.className = isErr ? "err" : "";
+  }
+
+  function fetchJson(url, opts) {
+    return fetch(url, opts).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    });
+  }
+
+  function findAircraft(candidates, i) {
+    i = i || 0;
+    if (i >= candidates.length) return Promise.resolve(null);
+    return fetchJson("https://api.airplanes.live/v2/callsign/" + candidates[i])
+      .then(function (data) {
+        var live = (data.ac || []).filter(function (a) { return a.lat != null; });
+        return live.length ? live[0] : findAircraft(candidates, i + 1);
+      })
+      .catch(function () { return findAircraft(candidates, i + 1); });
+  }
+
+  function findRoute(ac) {
+    var cs = (ac.flight || "").trim();
+    return fetchJson("https://api.adsbdb.com/v0/callsign/" + encodeURIComponent(cs))
+      .then(function (res) {
+        var fr = res && res.response && res.response.flightroute;
+        if (!fr || !fr.origin || !fr.destination) return null;
+        var o = fr.origin, d = fr.destination;
+        return { origin: { lat: o.latitude, lon: o.longitude, code: o.iata_code || o.icao_code, name: o.name },
+                 dest:   { lat: d.latitude, lon: d.longitude, code: d.iata_code || d.icao_code, name: d.name } };
+      }).catch(function () { return null; });
+  }
+
+  function applySky() {
+    var phase = skyPhase(new Date().getHours());
+    document.body.className = phase === "day" ? "" : phase;
+    document.getElementById("skyOrb").textContent =
+      phase === "night" ? "🌙" : phase === "dusk" ? "🌤️" : "☀️";
+  }
+
+  function makeStars() {
+    var box = document.getElementById("stars");
+    for (var i = 0; i < 70; i++) {
+      var s = document.createElement("i");
+      s.style.left = Math.random() * 100 + "%";
+      s.style.top = Math.random() * 100 + "%";
+      s.style.animationDelay = (Math.random() * 3) + "s";
+      box.appendChild(s);
+    }
+  }
+
+  function maybeGeocode(ac) {
+    if (state.geoAt && haversineKm(state.geoAt.lat, state.geoAt.lon, ac.lat, ac.lon) < 25) return;
+    state.geoAt = { lat: ac.lat, lon: ac.lon };
+    fetchJson("https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=" +
+              ac.lat + "&longitude=" + ac.lon + "&localityLanguage=en")
+      .then(function (geo) {
+        var text = whereText(geo);
+        var pill = document.getElementById("wherePill");
+        if (text) { pill.textContent = text; pill.style.display = "block"; }
+      })
+      .catch(function () {});
+  }
+
+  function ensureMap() {
+    if (state.map) return;
+    document.getElementById("map").style.display = "block";
+    state.map = L.map("map");
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(state.map);
+  }
+
+  function planeIcon(track) {
+    var rot = track == null ? 0 : track;
+    return L.divIcon({
+      className: "",
+      iconSize: [34, 34], iconAnchor: [17, 17],
+      html: '<svg class="plane-icon" width="34" height="34" viewBox="0 0 24 24" ' +
+            'style="transform:rotate(' + rot + 'deg)"><path fill="#1d2a3a" ' +
+            'd="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg>'
+    });
+  }
+
+  function drawRoute(route) {
+    var pts = [];
+    for (var i = 0; i <= 64; i++) {
+      pts.push(gcPoint(route.origin.lat, route.origin.lon, route.dest.lat, route.dest.lon, i / 64));
+    }
+    state.layers.push(L.marker([route.origin.lat, route.origin.lon],
+      { icon: L.divIcon({ className: "", html: "🛫", iconSize: [24, 24] }) }).addTo(state.map));
+    state.layers.push(L.marker([route.dest.lat, route.dest.lon],
+      { icon: L.divIcon({ className: "", html: "🛬", iconSize: [24, 24] }) }).addTo(state.map));
+    state.map.fitBounds(L.latLngBounds(pts).pad(0.15));
+    document.getElementById("fromName").textContent = route.origin.name || "";
+    document.getElementById("toName").textContent = route.dest.name || "";
+    document.getElementById("fromCode").textContent = route.origin.code + " 🛫";
+    document.getElementById("toCode").textContent = route.dest.code;
+    document.getElementById("funCard").style.display = "block";
+  }
+
+  function updateFunStrip(ac) {
+    var r = state.route;
+    if (!r) return;
+    var pct = progressPct(r.origin, r.dest, ac);
+    document.getElementById("barPlane").style.left = pct + "%";
+    var remaining = haversineKm(ac.lat, ac.lon, r.dest.lat, r.dest.lon);
+    var eta = etaText(remaining, ac.gs);
+    // No speed at all (satellite-tracked from the start): estimate from typical cruise.
+    if (!eta && ac.alt_baro !== "ground" && ac.alt_baro > 20000) {
+      eta = etaText(remaining, 460).replace("about", "roughly");
+    }
+    document.getElementById("funLine").textContent =
+      Math.round(pct) + "% there" + (eta ? " · " + eta : "");
+    var alt = ac.alt_baro === "ground" ? "on the ground" :
+      (ac.alt_baro ? Math.round(ac.alt_baro).toLocaleString() + " ft" : "—");
+    var spd = ac.gs ? Math.round(ac.gs * 1.852) + " km/h" : "—";
+    document.getElementById("liveLine").textContent = "🛩 " + alt + " · 💨 " + spd;
+  }
+
+  function nearDestination(ac) {
+    return state.route &&
+      haversineKm(ac.lat, ac.lon, state.route.dest.lat, state.route.dest.lon) < 50;
+  }
+
+  function celebrate() {
+    if (state.landed) return;
+    state.landed = true;
+    clearInterval(state.timer);
+    document.getElementById("banner").style.display = "block";
+    document.getElementById("funLine").textContent = "100% there · welcome! 🎉";
+    document.getElementById("barPlane").style.left = "100%";
+    setStatus("Flight complete ✨");
+    confettiBurst();
+  }
+
+  // Airline code not in our table? adsbdb can translate e.g. TS123 -> TSC123.
+  function resolveCallsign(input) {
+    var raw = String(input || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    return fetchJson("https://api.adsbdb.com/v0/callsign/" + encodeURIComponent(raw))
+      .then(function (res) {
+        var fr = res && res.response && res.response.flightroute;
+        return fr && fr.callsign_icao ? fr.callsign_icao : null;
+      }).catch(function () { return null; });
+  }
+
+  function poll(candidates) {
+    findAircraft(candidates).then(function (ac) {
+      if (!ac && !state.resolverTried) {
+        state.resolverTried = true;
+        return resolveCallsign(input.value).then(function (cs) {
+          if (cs && candidates.indexOf(cs) === -1) candidates.push(cs);
+          poll(candidates);
+        });
+      }
+      if (!ac) {
+        if (state.lastAc && state.route && nearDestination(state.lastAc) &&
+            (state.lastAc.alt_baro === "ground" || state.lastAc.alt_baro < 3000)) {
+          celebrate();
+        } else if (!state.lastAc) {
+          setStatus("I can't see this flight in the sky right now — it may not have taken off yet (or already landed).", true);
+        } else {
+          setStatus("Lost signal for a moment… still watching 👀");
+        }
+        return;
+      }
+      var first = !state.lastAc;
+      withLastKnownSpeed(ac, state.lastAc);
+      state.lastAc = ac;
+      applySky();
+      maybeGeocode(ac);
+      ensureMap();
+      var pos = [ac.lat, ac.lon];
+      if (!state.planeMarker) {
+        state.planeMarker = L.marker(pos, { icon: planeIcon(ac.track), zIndexOffset: 1000 }).addTo(state.map);
+      } else {
+        state.planeMarker.setLatLng(pos);
+        state.planeMarker.setIcon(planeIcon(ac.track));
+      }
+      setStatus("Tracking " + (ac.flight || "").trim() + " ✈️ live");
+      if (!state.routeDrawn) {
+        findRoute(ac).then(function (route) {
+          if (route && !state.routeDrawn) {
+            state.routeDrawn = true;
+            state.route = route;
+            drawRoute(route);
+            updateFunStrip(ac);
+          } else if (!route && first) {
+            state.map.setView(pos, 6);
+            setStatus("Tracking " + (ac.flight || "").trim() + " ✈️ (route unknown — enjoying the mystery tour)");
+          }
+        });
+      } else {
+        updateFunStrip(ac);
+      }
+      if (ac.alt_baro === "ground" && nearDestination(ac)) celebrate();
+    });
+  }
+
+  function startTracking() {
+    var candidates = callsignCandidates(input.value);
+    if (!candidates.length) { setStatus("Type a flight number first 🙂", true); return; }
+    clearInterval(state.timer);
+    if (state.map) {
+      state.layers.forEach(function (l) { state.map.removeLayer(l); });
+      if (state.planeMarker) state.map.removeLayer(state.planeMarker);
+    }
+    state.planeMarker = null; state.routeDrawn = false; state.route = null;
+    state.lastAc = null; state.landed = false; state.layers = []; state.resolverTried = false;
+    state.geoAt = null;
+    document.getElementById("banner").style.display = "none";
+    document.getElementById("funCard").style.display = "none";
+    document.getElementById("wherePill").style.display = "none";
+    setStatus("Scanning the skies… 🔭");
+    poll(candidates);
+    state.timer = setInterval(function () { if (!state.landed) poll(candidates); }, POLL_MS);
+  }
+
+  document.getElementById("trackBtn").addEventListener("click", startTracking);
+  input.addEventListener("keydown", function (e) { if (e.key === "Enter") startTracking(); });
+  applySky();
+  makeStars();
+
+  // Preview a populated page without network calls: flight-tracker.html?demo
+  if (location.search.indexOf("demo") !== -1) {
+    input.value = "UA988";
+    setStatus("Tracking UAL988 ✈️ live");
+    ensureMap();
+    var demoRoute = {
+      origin: { lat: 37.6189, lon: -122.375, code: "SFO", name: "San Francisco International Airport" },
+      dest:   { lat: 51.4706, lon: -0.4619,  code: "LHR", name: "London Heathrow Airport" }
+    };
+    state.route = demoRoute; state.routeDrawn = true;
+    drawRoute(demoRoute);
+    var demoAc = { lat: 52.0, lon: -35.0, track: 62, alt_baro: 38000, gs: 487, flight: "UAL988" };
+    state.planeMarker = L.marker([demoAc.lat, demoAc.lon],
+      { icon: planeIcon(demoAc.track), zIndexOffset: 1000 }).addTo(state.map);
+    updateFunStrip(demoAc);
+    var pill = document.getElementById("wherePill");
+    pill.textContent = "🌊 Somewhere over the Atlantic Ocean";
+    pill.style.display = "block";
+  }
+
+  // --- confetti (hand-rolled, no library) ---
+  function confettiBurst() {
+    var cv = document.getElementById("confetti");
+    var ctx = cv.getContext("2d");
+    cv.width = innerWidth; cv.height = innerHeight;
+    var colors = ["#ff6b35", "#ffd23f", "#3bceac", "#0ead69", "#5390d9", "#e56399"];
+    var parts = [];
+    for (var i = 0; i < 160; i++) {
+      parts.push({
+        x: Math.random() * cv.width, y: -20 - Math.random() * cv.height * 0.5,
+        w: 6 + Math.random() * 6, h: 8 + Math.random() * 8,
+        vy: 2 + Math.random() * 3, vx: -1.5 + Math.random() * 3,
+        rot: Math.random() * Math.PI, vr: -0.1 + Math.random() * 0.2,
+        color: colors[i % colors.length]
+      });
+    }
+    var start = performance.now();
+    (function frame(now) {
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      parts.forEach(function (p) {
+        p.x += p.vx; p.y += p.vy; p.rot += p.vr;
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+        ctx.fillStyle = p.color; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        ctx.restore();
+      });
+      if (now - start < 5000) requestAnimationFrame(frame);
+      else ctx.clearRect(0, 0, cv.width, cv.height);
+    })(start);
+  }
+
+  // --- built-in self-tests: open flight-tracker.html?test ---
+  if (location.search.indexOf("test") !== -1) {
+    var out = [];
+    function check(name, ok) { out.push((ok ? "✅" : "❌") + " " + name); }
+    check("UA123 → UAL123 first", callsignCandidates("ua123")[0] === "UAL123");
+    check("UA0123 strips zeros", callsignCandidates("UA0123").indexOf("UAL123") === 0);
+    check("raw callsign passes through", callsignCandidates("BAW42").indexOf("BAW42") !== -1);
+    check("TS123 → TSC123 (Air Transat)", callsignCandidates("TS123")[0] === "TSC123");
+    check("unknown airline falls back to raw", callsignCandidates("ZZ999")[0] === "ZZ999");
+    check("empty input → no candidates", callsignCandidates("").length === 0);
+    var d = haversineKm(37.6189, -122.375, 51.4706, -0.4619);
+    check("SFO–LHR ≈ 8600 km (got " + Math.round(d) + ")", d > 8300 && d < 8900);
+    var mid = gcPoint(0, 0, 0, 90, 0.5);
+    check("gc midpoint on equator", Math.abs(mid[0]) < 1e-6 && Math.abs(mid[1] - 45) < 1e-6);
+    var pct = progressPct({ lat: 0, lon: 0 }, { lat: 0, lon: 10 }, { lat: 0, lon: 5 });
+    check("halfway → ~50% (got " + Math.round(pct) + ")", pct > 49 && pct < 51);
+    var over = progressPct({ lat: 0, lon: 0 }, { lat: 0, lon: 10 }, { lat: 0, lon: 11 });
+    check("past dest stays high, ≤100 (got " + Math.round(over) + ")", over > 85 && over <= 100);
+    check("at destination → 100", progressPct({ lat: 0, lon: 0 }, { lat: 0, lon: 10 }, { lat: 0, lon: 10 }) === 100);
+    check("eta hours format", etaText(1852, 500) === "about 2h 0m to go");
+    check("eta minutes format", etaText(100, 400) === "about 8m to go");
+    check("eta hidden when slow/taxiing", etaText(100, 10) === "");
+    check("3am is night", skyPhase(3) === "night");
+    check("6pm is dusk", skyPhase(18) === "dusk");
+    check("noon is day", skyPhase(12) === "day");
+    check("ocean where-line", whereText({ locality: "Atlantic Ocean", countryCode: "" }) === "🌊 Somewhere over the Atlantic Ocean");
+    check("land where-line", whereText({ locality: "Llanwenog", countryCode: "GB" }) === "🌍 Currently over Llanwenog, United Kingdom");
+    check("empty geo → empty line", whereText(null) === "");
+    check("missing speed carried forward", withLastKnownSpeed({ gs: null }, { gs: 480 }).gs === 480);
+    check("own speed kept", withLastKnownSpeed({ gs: 300 }, { gs: 480 }).gs === 300);
+    var el = document.getElementById("testout");
+    el.style.display = "block";
+    el.textContent = out.join("\n");
+  }
+})();
+</script>
+</body>
+</html>
