@@ -400,6 +400,10 @@ if (typeof module !== "undefined") {
     document.getElementById("barPlane").style.left = pct + "%";
     var remaining = haversineKm(ac.lat, ac.lon, r.dest.lat, r.dest.lon);
     var eta = etaText(remaining, ac.gs);
+    // No speed at all (satellite-tracked from the start): estimate from typical cruise.
+    if (!eta && ac.alt_baro !== "ground" && ac.alt_baro > 20000) {
+      eta = etaText(remaining, 460).replace("about", "roughly");
+    }
     document.getElementById("funLine").textContent =
       Math.round(pct) + "% there" + (eta ? " · " + eta : "");
     var alt = ac.alt_baro === "ground" ? "on the ground" :
