@@ -248,6 +248,13 @@ function etaText(remainingKm, gsKnots) {
   return "about " + Math.floor(mins / 60) + "h " + (mins % 60) + "m to go";
 }
 
+// Satellite (ADS-C) position reports over oceans omit ground speed;
+// keep the last known speed so the ETA doesn't vanish mid-Atlantic.
+function withLastKnownSpeed(ac, last) {
+  if (ac && ac.gs == null && last && last.gs != null) ac.gs = last.gs;
+  return ac;
+}
+
 // Local hour -> sky mood.
 function skyPhase(hour) {
   if (hour >= 21 || hour < 5) return "night";
@@ -272,7 +279,7 @@ function whereText(geo) {
 if (typeof module !== "undefined") {
   module.exports = { callsignCandidates: callsignCandidates, haversineKm: haversineKm,
     gcPoint: gcPoint, progressPct: progressPct, etaText: etaText,
-    skyPhase: skyPhase, whereText: whereText };
+    skyPhase: skyPhase, whereText: whereText, withLastKnownSpeed: withLastKnownSpeed };
 }
 </script>
 <script>
@@ -448,6 +455,7 @@ if (typeof module !== "undefined") {
         return;
       }
       var first = !state.lastAc;
+      withLastKnownSpeed(ac, state.lastAc);
       state.lastAc = ac;
       applySky();
       maybeGeocode(ac);
@@ -502,6 +510,26 @@ if (typeof module !== "undefined") {
   input.addEventListener("keydown", function (e) { if (e.key === "Enter") startTracking(); });
   applySky();
   makeStars();
+
+  // Preview a populated page without network calls: flight-tracker.html?demo
+  if (location.search.indexOf("demo") !== -1) {
+    input.value = "UA988";
+    setStatus("Tracking UAL988 ✈️ live");
+    ensureMap();
+    var demoRoute = {
+      origin: { lat: 37.6189, lon: -122.375, code: "SFO", name: "San Francisco International Airport" },
+      dest:   { lat: 51.4706, lon: -0.4619,  code: "LHR", name: "London Heathrow Airport" }
+    };
+    state.route = demoRoute; state.routeDrawn = true;
+    drawRoute(demoRoute);
+    var demoAc = { lat: 52.0, lon: -35.0, track: 62, alt_baro: 38000, gs: 487, flight: "UAL988" };
+    state.planeMarker = L.marker([demoAc.lat, demoAc.lon],
+      { icon: planeIcon(demoAc.track), zIndexOffset: 1000 }).addTo(state.map);
+    updateFunStrip(demoAc);
+    var pill = document.getElementById("wherePill");
+    pill.textContent = "🌊 Somewhere over the Atlantic Ocean";
+    pill.style.display = "block";
+  }
 
   // --- confetti (hand-rolled, no library) ---
   function confettiBurst() {
@@ -561,6 +589,8 @@ if (typeof module !== "undefined") {
     check("ocean where-line", whereText({ locality: "Atlantic Ocean", countryCode: "" }) === "🌊 Somewhere over the Atlantic Ocean");
     check("land where-line", whereText({ locality: "Llanwenog", countryCode: "GB" }) === "🌍 Currently over Llanwenog, United Kingdom");
     check("empty geo → empty line", whereText(null) === "");
+    check("missing speed carried forward", withLastKnownSpeed({ gs: null }, { gs: 480 }).gs === 480);
+    check("own speed kept", withLastKnownSpeed({ gs: 300 }, { gs: 480 }).gs === 300);
     var el = document.getElementById("testout");
     el.style.display = "block";
     el.textContent = out.join("\n");
